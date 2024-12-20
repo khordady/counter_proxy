@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
@@ -8,51 +9,86 @@ import (
 	"net/url"
 )
 
-func main() {
-	for {
-		makeConnection("20241")
-		makeConnection("20242")
-		makeConnection("3309")
-	}
+type Message struct {
+	RND string
+	ORG string
 }
 
-func makeConnection(port string) {
-	// Listen for incoming connections from admin system
-	listener, err := net.Listen("tcp", "localhost:"+port)
-	if err != nil {
-		log.Fatalf("Failed to start listener: %v", err)
+var message = &Message{
+	RND: "",
+	ORG: "",
+}
+
+func main() {
+	go makeConnection("20241", "7001")
+	go makeConnection("20242", "7002")
+	go makeConnection("3309", "7009")
+
+	select {}
+}
+
+func makeConnection(local_port string, remote_port string) {
+	for {
+		// Listen for incoming connections from admin system
+		listener, err := net.Listen("tcp", "localhost:"+local_port)
+		if err != nil {
+			log.Fatalf("Failed to start listener: %v", err)
+		}
+
+		// Accept connections from counters and proxy theme
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Failed to accept connection: %v", err)
+			return
+		}
+
+		// Establish WebSocket connection to VPS
+		vpsURL := url.URL{Scheme: "ws", Host: "192.168.1.104", Path: "/counter"}
+		query := vpsURL.Query()
+		query.Set("port", remote_port)
+		vpsURL.RawQuery = query.Encode()
+
+		ws, _, err := websocket.DefaultDialer.Dial(vpsURL.String(), nil)
+		if err != nil {
+			log.Fatalf("Failed to connect to VPS: %v", err)
+		}
+
+		//read RND and ORG from socket and send it  to server
+		buffer := make([]byte, 512)
+		n, err := conn.Read(buffer)
+		if err != nil {
+			log.Printf("TCP connection closed: %v", err)
+			return
+		}
+
+		if message.RND == "" {
+			if err := json.Unmarshal(buffer[:n], &message); err != nil {
+				log.Printf("Error decode json: %v", err)
+				return
+			}
+		}
+
+		//send first for server and wait for response from server
+		err = ws.WriteMessage(websocket.TextMessage, buffer[:n])
+		if err != nil {
+			log.Fatalf("Failed to send KEY: %v", err)
+		}
+		//send second time for admin
+		err = ws.WriteMessage(websocket.TextMessage, buffer[:n])
+		if err != nil {
+			log.Fatalf("Failed to send KEY: %v", err)
+		}
+
+		_, message, err := ws.ReadMessage()
+		if err != nil {
+			log.Printf("WebSocket connection closed: %v", err)
+			return
+		}
+
+		fmt.Println(string(message))
+
+		go handleConnection(conn, ws)
 	}
-
-	// Establish WebSocket connection to VPS
-	vpsURL := url.URL{Scheme: "wss", Host: "vps.example.com", Path: "/counter"}
-	ws, _, err := websocket.DefaultDialer.Dial(vpsURL.String(), nil)
-	if err != nil {
-		log.Fatalf("Failed to connect to VPS: %v", err)
-	}
-
-	// Send KEY for identification
-	key := "1234-5678" // Replace with actual key logic
-	err = ws.WriteMessage(websocket.TextMessage, []byte(key))
-	if err != nil {
-		log.Fatalf("Failed to send KEY: %v", err)
-	}
-
-	// Accept connections from counters and proxy theme
-	conn, err := listener.Accept()
-	if err != nil {
-		log.Printf("Failed to accept connection: %v", err)
-		return
-	}
-
-	_, message, err := ws.ReadMessage()
-	if err != nil {
-		log.Printf("WebSocket connection closed: %v", err)
-		return
-	}
-
-	fmt.Println(message)
-
-	go handleConnection(conn, ws)
 }
 
 func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
