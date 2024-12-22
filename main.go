@@ -28,9 +28,7 @@ var address = "/websocket"
 func main() {
 	go makeConnection("20241")
 	go makeConnection("20242")
-	go makeConnection("3309")
-
-	select {}
+	makeConnection("3309")
 }
 
 func makeConnection(local_port string) {
@@ -187,15 +185,16 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 		for {
 			// Read from TCP connection
 			n, err := tcpConn.Read(buffer)
+			if n > 0 {
+				// Forward to WebSocket
+				err = ws.WriteMessage(websocket.BinaryMessage, buffer[:n])
+				if err != nil {
+					log.Printf("Failed to send data to WebSocket: %v", err)
+					return
+				}
+			}
 			if err != nil {
 				log.Printf("TCP connection closed: %v", err)
-				return
-			}
-
-			// Forward to WebSocket
-			err = ws.WriteMessage(websocket.BinaryMessage, buffer[:n])
-			if err != nil {
-				log.Printf("Failed to send data to WebSocket: %v", err)
 				return
 			}
 		}
