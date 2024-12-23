@@ -22,8 +22,12 @@ var message = &Message{
 	ORG: "",
 }
 
-var server = "192.168.1.105"
+// var server = "192.168.1.105:9090"
+var server = "expanel.app"
 var address = "/websocket"
+
+// var wss = "ws"
+var wss = "wss"
 
 func main() {
 	go makeConnection("20241")
@@ -51,7 +55,7 @@ func makeConnection(local_port string) {
 		fmt.Println("Socket Accepted:", local_port)
 
 		// Establish WebSocket connection to VPS
-		vpsURL := url.URL{Scheme: "ws", Host: server + ":9090", Path: address + "/counter"}
+		vpsURL := url.URL{Scheme: wss, Host: server, Path: address + "/counter"}
 		query := vpsURL.Query()
 		query.Set("port", local_port)
 		vpsURL.RawQuery = query.Encode()
