@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
-	"log"
 	"net"
 	"net/url"
 )
@@ -30,16 +29,17 @@ var address = "/websocket"
 var wss = "wss"
 
 func main() {
-	go makeConnection("20241")
-	go makeConnection("20242")
-	makeConnection("3309")
+	go connectServer("20240", "20241", "/co") //counter to officer
+	go connectServer("20241", "20241", "/ca") //counter to admin
+	go connectServer("20242", "20242", "/ca")
+	connectServer("3310", "3309", "/ca")
 }
 
-func makeConnection(local_port string) {
+func connectServer(local_port, remote_port, target string) {
 	// Listen for incoming connections from admin system
 	listener, err := net.Listen("tcp", "localhost:"+local_port)
 	if err != nil {
-		log.Printf("Failed to start listener: %v", err)
+		fmt.Printf("Failed to start listener: %v\n", err)
 	}
 
 	fmt.Println("Start listening:", local_port)
@@ -48,31 +48,33 @@ func makeConnection(local_port string) {
 		// Accept connections from counters and proxy theme
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Failed to accept connection: %v", err)
+			fmt.Printf("Failed to accept connection: %v\n", err)
 			continue
 		}
 
 		fmt.Println("Socket Accepted:", local_port)
 
 		// Establish WebSocket connection to VPS
-		vpsURL := url.URL{Scheme: wss, Host: server, Path: address + "/counter"}
+		vpsURL := url.URL{Scheme: wss, Host: server, Path: address + target}
 		query := vpsURL.Query()
-		query.Set("port", local_port)
+		query.Set("port", remote_port)
 		vpsURL.RawQuery = query.Encode()
 
 		ws, _, err := websocket.DefaultDialer.Dial(vpsURL.String(), nil)
 		if err != nil || ws == nil {
-			log.Printf("Failed to connect to VPS: %v", err)
+			fmt.Printf("Failed to connect to VPS: %v\n", err)
 			conn.Close()
 			continue
 		}
 
-		fmt.Println("WS connected:", local_port)
+		fmt.Println("WS connected:", remote_port)
 
-		if local_port == "3309" {
+		//because we first parse socket 20241 and 20242 so message has made since then
+		//we send first  message for server, second for admin process
+		if remote_port == "3309" {
 			err = ws.WriteJSON(message)
 			if err != nil {
-				log.Printf("Failed to send DB message: %v", err)
+				fmt.Printf("Failed to send DB message: %v\n", err)
 				ws.Close()
 				conn.Close()
 				continue
@@ -81,7 +83,7 @@ func makeConnection(local_port string) {
 
 			err = ws.WriteJSON(message)
 			if err != nil {
-				log.Printf("Failed to send DB message: %v", err)
+				fmt.Printf("Failed to send DB message: %v\n", err)
 				ws.Close()
 				conn.Close()
 				continue
@@ -152,7 +154,7 @@ func readFirstMessage(conn net.Conn) ([]byte, []byte) {
 
 	if message.RND == "" {
 		if err := json.Unmarshal(messageBytes, &message); err != nil {
-			log.Printf("Error decode json: %v", err)
+			fmt.Printf("Error decode json: %v\n", err)
 			return nil, nil
 		}
 	}
@@ -163,16 +165,15 @@ func readFirstMessage(conn net.Conn) ([]byte, []byte) {
 func repeatMessage(ws *websocket.Conn, lengthBytes, messageBytes []byte) bool {
 	err := ws.WriteMessage(websocket.BinaryMessage, lengthBytes)
 	if err != nil {
-		log.Printf("Failed to send LENGTH: %v", err)
+		fmt.Printf("Failed to send LENGTH: %v\n", err)
 		return false
 	}
 
 	err = ws.WriteMessage(websocket.TextMessage, messageBytes)
 	if err != nil {
-		log.Printf("Failed to send MESSAGE: %v", err)
+		fmt.Printf("Failed to send MESSAGE: %v\n", err)
 		return false
 	}
-
 	return true
 }
 
@@ -193,12 +194,12 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 				// Forward to WebSocket
 				err = ws.WriteMessage(websocket.BinaryMessage, buffer[:n])
 				if err != nil {
-					log.Printf("Failed to send data to WebSocket: %v", err)
+					fmt.Printf("Failed to send data to WebSocket: %v\n", err)
 					return
 				}
 			}
 			if err != nil {
-				log.Printf("TCP connection closed: %v", err)
+				fmt.Printf("TCP connection closed: %v\n", err)
 				return
 			}
 		}
@@ -208,15 +209,16 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 	for {
 		// Read from WebSocket
 		_, message, err := ws.ReadMessage()
-		if err != nil {
-			log.Printf("WebSocket connection closed: %v", err)
-			return
+		if message != nil {
+			// Write to TCP connection
+			_, err = tcpConn.Write(message)
+			if err != nil {
+				fmt.Printf("Failed to write data to TCP: %v\n", err)
+				return
+			}
 		}
-
-		// Write to TCP connection
-		_, err = tcpConn.Write(message)
 		if err != nil {
-			log.Printf("Failed to write data to TCP: %v", err)
+			fmt.Printf("WebSocket connection closed: %v\n", err)
 			return
 		}
 	}
