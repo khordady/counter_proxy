@@ -21,7 +21,7 @@ var message = &Message{
 	ORG: "",
 }
 
-// var server = "192.168.1.105:9090"
+// var server = "192.168.1.104:9090"
 var server = "expanel.app"
 var address = "/websocket"
 
