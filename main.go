@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
+	"log"
 	"net"
 	"net/url"
+	"time"
 )
 
 type Message struct {
@@ -22,15 +24,15 @@ var message = &Message{
 	ORG: "",
 }
 
-//var server = "192.168.1.105"
+var server = "192.168.1.105"
 
-var server = "mail.expanel.app"
+//var server = "mail.expanel.app"
 
 var address = "/websocket"
 
-//var wss = "ws"
+var wss = "ws"
 
-var wss = "wss"
+//var wss = "wss"
 
 func main() {
 	go connectServer("20240", "20241", "/co") //counter to officer
@@ -204,6 +206,16 @@ func repeatMessage(ws *websocket.Conn, lengthBytes, messageBytes []byte) bool {
 func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 	defer tcpConn.Close()
 	defer ws.Close()
+
+	fmt.Println("Read start message")
+	_, message, err3 := ws.ReadMessage()
+	if message != nil {
+		fmt.Printf("First message is: %s \n", string(message))
+	}
+	if err3 != nil {
+		fmt.Printf("Error read first message %v\n", err3)
+		return
+	}
 
 	// Goroutine to forward data from TCP to WebSocket
 	go func() {
