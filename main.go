@@ -73,6 +73,26 @@ func connectServer(local_port, remote_port, target string) {
 
 		fmt.Println("WS connected:", remote_port)
 
+		ws.SetPongHandler(func(appData string) error {
+			log.Println("Received pong:", appData)
+			ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+			return nil
+		})
+
+		// Start a ping loop
+		go func() {
+			ticker := time.NewTicker(30 * time.Second) // Send ping every 30 seconds
+			defer ticker.Stop()
+
+			for {
+				<-ticker.C
+				if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+					log.Println("Error sending ping:", err)
+					return
+				}
+			}
+		}()
+
 		//because we first parse socket 20241 and 20242 so message has made since then
 		//we send first  message for server, second for admin process
 		if remote_port == "3309" {
