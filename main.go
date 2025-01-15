@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
@@ -21,11 +22,14 @@ var message = &Message{
 	ORG: "",
 }
 
-// var server = "192.168.1.104:9090"
-var server = "expanel.app"
+//var server = "192.168.1.105"
+
+var server = "mail.expanel.app"
+
 var address = "/websocket"
 
-// var wss = "ws"
+//var wss = "ws"
+
 var wss = "wss"
 
 func main() {
@@ -79,7 +83,7 @@ func connectServer(local_port, remote_port, target string) {
 				conn.Close()
 				continue
 			}
-			fmt.Println("Sent First message DB")
+			fmt.Printf("Sent First message DB RND: %s ORG: %s\n", message.RND, message.ORG)
 
 			err = ws.WriteJSON(message)
 			if err != nil {
@@ -191,16 +195,20 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 			// Read from TCP connection
 			n, err := tcpConn.Read(buffer)
 			if n > 0 {
-				// Forward to WebSocket
-				err = ws.WriteMessage(websocket.BinaryMessage, buffer[:n])
-				if err != nil {
+				err2 := ws.WriteMessage(websocket.BinaryMessage, buffer[:n])
+				if err2 != nil {
 					fmt.Printf("Failed to send data to WebSocket: %v\n", err)
 					return
 				}
 			}
 			if err != nil {
-				fmt.Printf("TCP connection closed: %v\n", err)
-				return
+				if errors.Is(err, net.ErrClosed) {
+					fmt.Println("TCP connection closed by peer")
+					return
+				} else {
+					fmt.Printf("TCP connection read error: %v\n", err)
+					return
+				}
 			}
 		}
 	}()
@@ -211,15 +219,20 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 		_, message, err := ws.ReadMessage()
 		if message != nil {
 			// Write to TCP connection
-			_, err = tcpConn.Write(message)
-			if err != nil {
+			_, err2 := tcpConn.Write(message)
+			if err2 != nil {
 				fmt.Printf("Failed to write data to TCP: %v\n", err)
 				return
 			}
 		}
 		if err != nil {
-			fmt.Printf("WebSocket connection closed: %v\n", err)
-			return
+			if errors.Is(err, net.ErrClosed) {
+				fmt.Println("TCP connection closed by peer")
+				return
+			} else {
+				fmt.Printf("TCP connection read error: %v\n", err)
+				return
+			}
 		}
 	}
 }
