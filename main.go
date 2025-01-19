@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
-	"log"
 	"net"
 	"net/url"
-	"time"
 )
 
 type Message struct {
@@ -24,15 +22,15 @@ var message = &Message{
 	ORG: "",
 }
 
-var server = "192.168.1.105"
+//var server = "192.168.1.105:9090"
 
-//var server = "mail.expanel.app"
+var server = "mail.expanel.app:9090"
 
 var address = "/websocket"
 
-var wss = "ws"
+//var wss = "ws"
 
-//var wss = "wss"
+var wss = "wss"
 
 func main() {
 	go connectServer("20240", "20241", "/co") //counter to officer
@@ -74,26 +72,6 @@ func connectServer(local_port, remote_port, target string) {
 		}
 
 		fmt.Println("WS connected:", remote_port)
-
-		ws.SetPongHandler(func(appData string) error {
-			log.Println("Received pong:", appData)
-			ws.SetReadDeadline(time.Now().Add(60 * time.Second))
-			return nil
-		})
-
-		// Start a ping loop
-		go func() {
-			ticker := time.NewTicker(30 * time.Second) // Send ping every 30 seconds
-			defer ticker.Stop()
-
-			for {
-				<-ticker.C
-				if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-					log.Println("Error sending ping:", err)
-					return
-				}
-			}
-		}()
 
 		//because we first parse socket 20241 and 20242 so message has made since then
 		//we send first  message for server, second for admin process
@@ -207,16 +185,6 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 	defer tcpConn.Close()
 	defer ws.Close()
 
-	fmt.Println("Read start message")
-	_, message, err3 := ws.ReadMessage()
-	if message != nil {
-		fmt.Printf("First message is: %s \n", string(message))
-	}
-	if err3 != nil {
-		fmt.Printf("Error read first message %v\n", err3)
-		return
-	}
-
 	// Goroutine to forward data from TCP to WebSocket
 	go func() {
 		defer tcpConn.Close()
@@ -259,10 +227,10 @@ func handleConnection(tcpConn net.Conn, ws *websocket.Conn) {
 		}
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
-				fmt.Println("TCP connection closed by peer")
+				fmt.Println("WS connection closed by peer")
 				return
 			} else {
-				fmt.Printf("TCP connection read error: %v\n", err)
+				fmt.Printf("WS connection read error: %v\n", err)
 				return
 			}
 		}
